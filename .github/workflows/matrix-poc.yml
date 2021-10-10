@@ -1,0 +1,140 @@
+name: Matrix POC
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # parse-config:
+  #   name: Parse Pipeline Config
+  #   outputs:
+  #     prechecks: ${{ steps.parse.outputs.prechecks }}
+  #   runs-on: ubuntu-latest
+  #   steps: 
+  #     - uses: actions/checkout@v2
+  #     - id: parse
+  #       run: |
+  #         PRECHECKS=$(cat ./.github/pipeline.json | jq -c '.prechecks')
+  #         echo "::set-output name=prechecks::${PRECHECKS}"
+
+  # config:
+  #   name: Build Pipeline Config
+  #   outputs:
+  #     prebuild: ${{ steps.build-config.outputs.prebuild }}
+  #   runs-on: ubuntu-latest
+  #   steps: 
+  #     - uses: actions/checkout@v2
+  #     - id: build-config
+  #       run: |
+  #         PREBUILD=$(jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . })' <<< $(find .pipeline/prebuild -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n"))
+  #         echo "PREBUILD: ${PREBUILD}"
+  #         echo "::set-output name=prebuild::${PREBUILD}"
+
+  # prebuild:
+  #   name: Pre-Build
+  #   needs: [config]
+  #   if: ${{ needs.config.outputs.prebuild != '[]' }}
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       prebuild: ${{ fromJson(needs.config.outputs.prebuild) }}
+  #   steps:
+  #     - uses: actions/checkout@v2
+
+  #     - run: |
+  #         echo "Name: ${{ matrix.prebuild.name }}"
+  #       shell: bash
+
+  #     - run: |
+  #         mkdir -p .generated
+  #         cp -a ".pipeline/prebuild/${{ matrix.prebuild.name }}/." .generated/prebuild
+
+  #     - id: invoke-action
+  #       name: Run Pre-Build Action
+  #       uses: ./.generated/prebuild
+  # config:
+  #   name: Configure
+  #   outputs:
+  #     json: ${{ steps.build-config.outputs.json }}
+  #   runs-on: ubuntu-latest
+  #   steps: 
+  #     - uses: actions/checkout@v2
+  #     - id: build-config
+  #       name: Find Steps
+  #       run: |
+  #         CONFIG=$((
+  #           find .pipeline/prebuild -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n" \
+  #             | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "local-action" })';
+  #           find .pipeline/prebuild -maxdepth 1 -type f \
+  #             | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "script" })';
+  #         ) | jq -s '.[0] + .[1]')
+  #         echo "config ${CONFIG}"
+  #         echo "::set-output name=json::${CONFIG}"
+
+  config:
+    name: Configure
+    outputs:
+      steps: ${{ steps.build-config.outputs.steps }}
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v2
+      - id: build-config
+        name: Find Steps
+        run: |
+          CONFIG=$((
+            (
+              find .pipeline/prebuild -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n" \
+                | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "local-action" })';
+              find .pipeline/prebuild -maxdepth 1 -type f \
+                | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "script" })';
+            ) | jq -s '{ prebuild: (.[0] + .[1]) }';
+            (
+              find .pipeline/postbuild -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n" \
+                | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "local-action" })';
+              find .pipeline/postbuild -maxdepth 1 -type f \
+                | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "script" })';
+            ) | jq -s '{ postbuild: (.[0] + .[1]) }';
+          ) | jq -sc '.[0] * .[1]')
+          echo "Config: ${CONFIG}"
+          echo "::set-output name=steps::${CONFIG}"
+
+  prebuild:
+    name: Pre-Build
+    needs: [config]
+    uses: 'skleinjung/actions-workflow-test/.github/workflows/invoke-stage.yml@main'
+    with:
+      config: ${{ needs.config.outputs.steps }}
+      name: prebuild
+  
+  builda:
+    name: Build A
+    needs: [config, prebuild]
+    uses: 'skleinjung/actions-workflow-test/.github/workflows/invoke-stage.yml@main'
+    with:
+      config: ${{ needs.config.outputs.steps }}
+      name: prebuild
+  
+  buildb:
+    name: Build B
+    needs: [config, prebuild]
+    uses: 'skleinjung/actions-workflow-test/.github/workflows/invoke-stage.yml@main'
+    with:
+      config: ${{ needs.config.outputs.steps }}
+      name: prebuild
+  
+  postbuild:
+    name: Post-Build
+    needs: [config, builda, buildb]
+    uses: 'skleinjung/actions-workflow-test/.github/workflows/invoke-stage.yml@main'
+    with:
+      config: ${{ needs.config.outputs.steps }}
+      name: postbuild
+
+  deploy:
+    name: Deploy
+    needs: [config, builda, buildb]
+    uses: 'skleinjung/actions-workflow-test/.github/workflows/invoke-stage.yml@main'
+    with:
+      config: ${{ needs.config.outputs.steps }}
+      name: postbuild

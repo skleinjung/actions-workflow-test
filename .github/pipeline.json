@@ -1,0 +1,7 @@
+{
+  "prechecks": [
+    { "type": "action", "path": "./.github/actions/foo" },
+    { "type": "action", "path": "./.github/actions/bar" },
+    { "type": "bash", "path": "bar" }
+  ]   
+}

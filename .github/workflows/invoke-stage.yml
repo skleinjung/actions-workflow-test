@@ -1,0 +1,80 @@
+name: Invoke Stage
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: Pipeline configuration JSON.
+        required: true
+        type: string
+      name:
+        description: Name of the pipeline stage.
+        required: true
+        type: string
+
+jobs:
+  # config:
+  #   name: Configure
+  #   outputs:
+  #     actions: ${{ steps.build-config.outputs.actions }}
+  #     scripts: ${{ steps.build-config.outputs.scripts }}
+  #   runs-on: ubuntu-latest
+  #   steps: 
+  #     - uses: actions/checkout@v2
+  #     - id: build-config
+  #       name: Find Steps
+  #       run: |
+  #         ACTIONS=$(jq -ncR '[inputs] | map(select(length > 0)) | map( { path: . })' <<< $(find ".pipeline/${{ inputs.name }}" -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n"))
+  #         echo "::set-output name=actions::${ACTIONS}"
+  #         SCRIPTS=$(jq -ncR '[inputs] | map(select(length > 0)) | map( { path: . })' <<< $(find ".pipeline/${{ inputs.name }}" -maxdepth 1 -type f))
+  #         echo "::set-output name=scripts::${SCRIPTS}"
+  #         echo "ACTIONS: ${ACTIONS}"
+  #         echo "SCRIPTS: ${SCRIPTS}"
+
+  # config:
+  #   name: Configure
+  #   outputs:
+  #     steps: ${{ steps.build-config.outputs.steps }}
+  #   runs-on: ubuntu-latest
+  #   steps: 
+  #     - uses: actions/checkout@v2
+  #     - id: build-config
+  #       name: Find Steps
+  #       run: |
+  #         STEPS=$((
+  #           find .pipeline/prebuild -type f -name "action.yaml" -o -name "action.yml" -printf "%h\n" \
+  #             | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "local-action" })';
+  #           find .pipeline/prebuild -maxdepth 1 -type f \
+  #             | jq -ncR '[inputs] | map(select(length > 0)) | map( { name: . | split("/")[-1], path: ., type: "script" })';
+  #         ) | jq -sc '.[0] + .[1]')
+  #         echo "Steps: ${STEPS}"
+  #         echo "::set-output name=steps::${STEPS}"
+
+  invoke:
+    name: ${{ matrix.steps.name }}
+    if: ${{ inputs.steps != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        steps: ${{ fromJSON(inputs.config)[inputs.name] }}
+    steps:
+      - uses: actions/checkout@v2
+
+      # local action steps
+      - name: Copy Action
+        if: ${{ matrix.steps.type == 'local-action' }}
+        run: |
+          mkdir -p .generated
+          cp -a "${{ matrix.steps.path }}/." .generated/action
+        shell: bash
+      - name: Run Action
+        if: ${{ matrix.steps.type == 'local-action' }}
+        uses: ./.generated/action
+
+      # script steps
+      - name: Run Script
+        if: ${{ matrix.steps.type == 'script' }}
+        run: |
+          chmod +x ${{ matrix.steps.path }}
+          ${{ matrix.steps.path }}
+        shell: bash

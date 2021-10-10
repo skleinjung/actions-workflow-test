@@ -1,0 +1,8 @@
+name: Test Action
+description: Don't do anything useful
+
+runs:
+  using: "composite"
+  steps:
+    - run: echo Hello baz
+      shell: bash
