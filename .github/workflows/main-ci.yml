@@ -47,5 +47,5 @@ jobs:
     needs: [validate, version-bump]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "${{ needs.version-bump.outputs.tyhpe }}
+      - run: echo "${{ needs.version-bump.outputs.type }}"
         shell: bash
