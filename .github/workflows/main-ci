@@ -1,0 +1,41 @@
+name: Main branch CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+  push:
+    branches:
+      - main
+    
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Valid!
+        shell: bash
+  
+  version:
+    name: Calculate Version
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: version
+        run: |
+          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            echo "::set-output name=version::MERGED"
+          else
+            echo "::set-output name=version::COMMITED"
+          fi
+        shell bash
+        
+  tag:
+    name: Tag
+    needs: [validate, version]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${{ needs.version.outputs.version }}
+        shell: bash
