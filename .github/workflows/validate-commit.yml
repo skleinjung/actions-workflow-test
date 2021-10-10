@@ -1,0 +1,12 @@
+name: Validate commit
+
+on:
+  workflow_call:
+  
+jobs:
+  echo:
+    name: Echo Something
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Valid!
+        shell: bash
