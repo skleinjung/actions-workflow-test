@@ -17,25 +17,35 @@ jobs:
       - run: echo Valid!
         shell: bash
   
-  version:
-    name: Calculate Version
+  version-bump:
+    name: Calculate Version Bump
+    env:
+      # name of the triggering webhook event -- 'push' or 'pull_request"
+      EVENT: ${{ github.event_name }}
+      # for pull_request events, boolean indicating whether the PR was merged or not; otherwise empty string
+      MERGED: ${{ github.event.pull_request.merged }}
     outputs:
-      version: ${{ steps.version.outputs.value }}
+      # type of SemVer version bump to use (major, minor, patch) or 'skip' if this event should not trigger CI
+      type: ${{ steps.version.outputs.type }}
     runs-on: ubuntu-latest
     steps:
       - id: version
         run: |
-          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-            echo "::set-output name=version::MERGED"
+          echo "event: ${EVENT} <<"
+          echo "merged: ${MERGED} <<"
+          if [ "${EVENT}" = "push" ]; then
+            echo "::set-output name=type::patch"
+          elif [ "${MERGED}" = "true" ]; then
+            echo "::set-output name=type::minor"
           else
-            echo "::set-output name=version::COMMITED"
+           echo "::set-output name=type::skip"
           fi
         shell: bash
         
   tag:
     name: Tag
-    needs: [validate, version]
+    needs: [validate, version-bump]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "${{ needs.version.outputs.version }}
+      - run: echo "${{ needs.version-bump.outputs.tyhpe }}
         shell: bash
